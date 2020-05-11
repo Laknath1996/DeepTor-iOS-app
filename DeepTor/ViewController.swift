@@ -8,6 +8,7 @@
 
 import UIKit
 import Vision
+import Foundation
 
 
 class ViewController: UIViewController, UITextFieldDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
@@ -19,7 +20,7 @@ class ViewController: UIViewController, UITextFieldDelegate, UIImagePickerContro
     @IBOutlet weak var subjectImageLabel: UILabel!
     
     //MARK : Core ML Model
-    let SegmentationModel = ScleraUNet()
+    let SegmentationModel = ScleraUNnet()
     
     //MARK : Vision Properties
     var request: VNCoreMLRequest?
@@ -77,11 +78,12 @@ class ViewController: UIViewController, UITextFieldDelegate, UIImagePickerContro
             print("Model all good")
             self.visionModel = visionModel
             request = VNCoreMLRequest(model: visionModel, completionHandler: visionRequestDidComplete)
-            request?.imageCropAndScaleOption = .centerCrop
+            request?.imageCropAndScaleOption = .scaleFill
         } else {
             fatalError()
         }
     }
+    
     
     //MARK: Actions
     @IBAction func selectImageFromPhotoLibrary(_ sender: UITapGestureRecognizer) {
@@ -107,7 +109,8 @@ class ViewController: UIViewController, UITextFieldDelegate, UIImagePickerContro
     
     @IBAction func segementImage(_ sender: UIButton){
         print("Segmenting... ")
-        let input_image = photoImageView.image?.cgImage
+        let image = resizeImage(image: photoImageView.image!, targetSize: CGSize(width: CGFloat(256.0), height: CGFloat(256.0)))
+        let input_image = image.cgImage
         predict(with: input_image!)
     }
     
@@ -124,10 +127,37 @@ extension ViewController {
         print("Prediction done")
     }
     
+    func resizeImage(image: UIImage, targetSize: CGSize) -> UIImage {
+        let size = image.size
+        
+        let widthRatio  = targetSize.width  / size.width
+        let heightRatio = targetSize.height / size.height
+        
+        // Figure out what our orientation is, and use that to form the rectangle
+        var newSize: CGSize
+        if(widthRatio > heightRatio) {
+            newSize = CGSize(width: size.width * heightRatio, height: size.height * heightRatio)
+        } else {
+            newSize = CGSize(width: size.width * widthRatio,  height: size.height * widthRatio)
+        }
+        
+        // This is the rect that we've calculated out and this is what is actually used below
+        let rect = CGRect(x: 0, y: 0, width: newSize.width, height: newSize.height)
+        
+        // Actually do the resizing to the rect using the ImageContext stuff
+        UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
+        image.draw(in: rect)
+        let newImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        return newImage!
+    }
+    
     func visionRequestDidComplete(request: VNRequest, error: Error?){
         if let observations = request.results as? [VNCoreMLFeatureValueObservation], let
             segmentationMap = observations.first?.featureValue.multiArrayValue{
         
+            print(segmentationMap.shape)
             
             for i in 0...255 {
                 for j in 0...255 {
